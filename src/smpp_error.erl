@@ -170,5 +170,6 @@ format(?ESME_RINVBCAST_REP) ->
 format(?ESME_RINVBCASTSRVGRP) ->
     "Broadcast Service Group is invalid.";
 format(?ESME_RINVBCASTCHANIND) ->
-    "Broadcast Channel Indicator is invalid.".
-
+    "Broadcast Channel Indicator is invalid.";
+format(ErrorCode) ->
+    "Error:" ++ integer_to_list(ErrorCode).
