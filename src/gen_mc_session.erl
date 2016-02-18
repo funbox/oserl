@@ -550,7 +550,11 @@ handle_sync_event({reply, {SeqNum, Reply}}, _From, Stn, Std) ->
     {reply, ok, Stn, Std};
 handle_sync_event({?COMMAND_ID_OUTBIND, Params}, From, open, Std) ->
     NewStd = send_request(?COMMAND_ID_OUTBIND, Params, From, Std),
-    {next_state, outbound, NewStd}.
+    {next_state, outbound, NewStd};
+handle_sync_event({?COMMAND_ID_ALERT_NOTIFICATION = CmdId, Params}, From, bound_rx = Stn, Std) ->
+    NewStd = send_request(CmdId, Params, From, Std),
+    {reply, ok, Stn, NewStd}.
+
 
 %%%-----------------------------------------------------------------------------
 %%% CODE UPDATE EXPORTS
@@ -722,4 +726,3 @@ start_timer(Timers, Ref) ->
 
 cancel_timer(Ref) ->
     smpp_session:cancel_timer(Ref).
-

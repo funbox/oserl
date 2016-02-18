@@ -32,6 +32,10 @@
 %%% This module was implemented for test coverage purporses only, please
 %%% refer to doc/examples for a much cleaner MC example to start with.
 -module(test_mc).
+
+-modified('Date: 18.11.2015 11:36:10 NOVT').
+-modified_by('d.zolotarev@fun-box.ru').
+
 -behaviour(gen_mc).
 
 %%% INCLUDE FILES
@@ -201,7 +205,7 @@ success() ->
 %%% INIT/TERMINATE EXPORTS
 %%%-----------------------------------------------------------------------------
 init([Silent]) ->
-    {A1, A2, A3} = now(),
+    {A1, A2, A3} = erlang:timestamp(),
     random:seed(A1, A2, A3),
     {ok, #st{silent = Silent}}.
 

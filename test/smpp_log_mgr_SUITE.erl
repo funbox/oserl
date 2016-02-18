@@ -26,26 +26,27 @@
 %%% CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 %%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 %%% POSSIBILITY OF SUCH DAMAGE.
--module(operation_SUITE).
+-module(smpp_log_mgr_SUITE).
+
+-modified('Date: 18.11.2015 11:34:20 NOVT').
+-modified_by('d.zolotarev@fun-box.ru').
 
 %%% INCLUDE FILES
 -include_lib("common_test/include/ct.hrl").
--include_lib("oserl/include/smpp_globals.hrl").
 
 %%% EXTERNAL EXPORTS
 -compile(export_all).
 
 %%% MACROS
 -define(MATCH_SPEC, [{'_', [], [{message, {return_trace}}]}]).
--define(MAX_OPERATIONS, 1000).
--define(MAX_TIME, 1000).
+-define(MAX_TIME, 10000).
 -define(STUBS_DIR, "../../stubs").  % Tests run in log/ct_run.*
 
 %%%-----------------------------------------------------------------------------
 %%% SUITE EXPORTS
 %%%-----------------------------------------------------------------------------
 all() ->
-    [performance].
+    [api, disk_log, tty_log, performance].
 
 
 sequences() ->
@@ -60,7 +61,7 @@ suite() ->
 %%%-----------------------------------------------------------------------------
 init_per_suite(Conf) ->
     lists:foreach(fun(X) -> code:add_path(X) end, ct:get_config(paths, [])),
-    {A1, A2, A3} = now(),
+    {A1, A2, A3} = erlang:timestamp(),
     random:seed(A1, A2, A3),
     dbg:tracer(),
     dbg:p(all, [c, sos, sol]),
@@ -120,16 +121,138 @@ end_traces(Case) ->
 %%%-----------------------------------------------------------------------------
 %%% TEST CASES
 %%%-----------------------------------------------------------------------------
+api() ->
+    [{userdata, [{doc, "Tests the API of the loggin manager."}]}].
+
+api(_Conf) ->
+    {ok, Pid1} = smpp_log_mgr:start(),
+    {ok, Pid2} = smpp_log_mgr:start_link(),
+    Params = [{system_id, "oserl"}],
+    UnbindRespError = smpp_operation:new(16#80000002, 2, 1, Params),
+    {ok, DataError} = smpp_operation:pack(UnbindRespError),
+    UnbindRespOk = smpp_operation:new(16#80000002, 3, Params),
+    {ok, DataOk} = smpp_operation:pack(UnbindRespOk),
+    ok = smpp_log_mgr:pdu(Pid1, DataError),
+    ok = smpp_log_mgr:pdu(Pid1, DataOk),
+    LogArgs = ct:get_config(log_args, []),
+    ok = smpp_log_mgr:add_handler(Pid2, smpp_disk_log_hlr, LogArgs),
+    ok = smpp_log_mgr:pdu(Pid2, DataError),
+    ok = smpp_log_mgr:pdu(Pid2, DataOk),
+    ok = smpp_log_mgr:add_handler(Pid2, smpp_tty_log_hlr, LogArgs),
+    ok = smpp_log_mgr:pdu(Pid2, DataError),
+    ok = smpp_log_mgr:pdu(Pid2, DataOk),
+    TtyLogArgs = [{format, fun(Pdu) -> cl_binary:to_hexlist(Pdu) end},
+                  {filter, fun(_Pdu) -> true end}|LogArgs],
+    Handler1 = {smpp_tty_log_hlr, []},
+    Handler2 = {smpp_tty_log_hlr, TtyLogArgs},
+    ok = smpp_log_mgr:swap_handler(Pid2, Handler1, Handler2),
+    ok = smpp_log_mgr:pdu(Pid2, DataError),
+    ok = smpp_log_mgr:pdu(Pid2, DataOk),
+    _TArgs = smpp_log_mgr:delete_handler(Pid2, smpp_tty_log_hlr, []),
+    ok = smpp_log_mgr:pdu(Pid2, DataError),
+    ok = smpp_log_mgr:pdu(Pid2, DataOk),
+    _DArgs = smpp_log_mgr:delete_handler(Pid2, smpp_disk_log_hlr, []),
+    ok = smpp_log_mgr:pdu(Pid2, DataError),
+    ok = smpp_log_mgr:pdu(Pid2, DataOk),
+    ok = smpp_log_mgr:stop(Pid1),
+    ok = smpp_log_mgr:stop(Pid2).
+
+
+disk_log() ->
+    [{userdata, [{doc, "Tests the disk log handler."}]}].
+
+disk_log(_Conf) ->
+    {ok, Pid} = smpp_log_mgr:start_link(),
+    Params = [{system_id, "oserl"}],
+    UnbindRespError = smpp_operation:new(16#80000002, 2, 1, Params),
+    {ok, DataError} = smpp_operation:pack(UnbindRespError),
+    UnbindRespOk = smpp_operation:new(16#80000002, 3, Params),
+    {ok, DataOk} = smpp_operation:pack(UnbindRespOk),
+    Time1 = calendar:local_time(),
+    timer:sleep(1500),
+    LogArgs = ct:get_config(log_args, []),
+    File = proplists:get_value(file, LogArgs),
+    os:cmd("rm -f " ++ File ++ "*"),
+    ok = smpp_log_mgr:add_handler(Pid, smpp_disk_log_hlr, LogArgs),
+    ok = smpp_log_mgr:pdu(Pid, DataError),
+    ok = smpp_log_mgr:pdu(Pid, DataOk),
+    timer:sleep(3000),
+    2 = smpp_disk_log_hlr:count(smpp_log, any, fun(_) -> true end),
+    2 = smpp_disk_log_hlr:count(smpp_log, {from, Time1}, fun(_) -> true end),
+    ok = smpp_log_mgr:pdu(Pid, DataError),
+    ok = smpp_log_mgr:pdu(Pid, DataOk),
+    timer:sleep(3000),
+    Time2 = calendar:local_time(),
+    0 = smpp_disk_log_hlr:count(smpp_log, {until, Time1}, fun(_) -> true end),
+    4 = smpp_disk_log_hlr:count(smpp_log, {lapse, Time1, Time2},
+                                fun(_) -> true end),
+    4 = smpp_disk_log_hlr:count(smpp_log, any, fun(_) -> true end),
+    4 = smpp_disk_log_hlr:count(smpp_log, {from, Time1}, fun(_) -> true end),
+    0 = smpp_disk_log_hlr:count(smpp_log, {from, Time1}, fun(_) -> false end),
+    DiskLogArgs = [{format, fun(Pdu) -> cl_binary:to_hexlist(Pdu) end},
+                   {filter, fun(_Pdu) -> true end}|LogArgs],
+    Handler1 = {smpp_disk_log_hlr, []},
+    Handler2 = {smpp_disk_log_hlr, DiskLogArgs},
+    ok = smpp_log_mgr:swap_handler(Pid, Handler1, Handler2),
+    ok = smpp_log_mgr:pdu(Pid, DataError),
+    ok = smpp_log_mgr:pdu(Pid, DataOk),
+    Handler3 = {smpp_disk_log_hlr, [{file, "/wrong/file/name"}]},
+    {error, {error, {file_error, _File, _Details}}} =
+        smpp_log_mgr:swap_handler(Pid, Handler1, Handler3),
+    ok = smpp_log_mgr:add_handler(Pid, smpp_disk_log_hlr, []),
+    ok = gen_event:notify(Pid, other_event),
+    {ok, state} = smpp_disk_log_hlr:handle_info(info, state),
+    {ok, state} = smpp_disk_log_hlr:code_change(old_vsn, state, extra),
+%    {error, {'EXIT',{function_clause, _}}} =
+%        gen_event:call(Pid, smpp_disk_log_hlr, call),
+    _TArgs = smpp_log_mgr:delete_handler(Pid, smpp_disk_log_hlr, []),
+    ok = smpp_log_mgr:stop(Pid).
+
+
+
+tty_log() ->
+    [{userdata, [{doc, "Tests the tty log handler."}]}].
+
+tty_log(_Conf) ->
+    {ok, Pid} = smpp_log_mgr:start_link(),
+    Params = [{system_id, "oserl"}],
+    UnbindRespError = smpp_operation:new(16#80000002, 2, 1, Params),
+    {ok, DataError} = smpp_operation:pack(UnbindRespError),
+    UnbindRespOk = smpp_operation:new(16#80000002, 3, Params),
+    {ok, DataOk} = smpp_operation:pack(UnbindRespOk),
+    ok = smpp_log_mgr:add_handler(Pid, smpp_tty_log_hlr, []),
+    ok = smpp_log_mgr:pdu(Pid, DataError),
+    ok = smpp_log_mgr:pdu(Pid, DataOk),
+    LogArgs = ct:get_config(log_args, []),
+    TtyLogArgs = [{format, fun(Pdu) -> cl_binary:to_hexlist(Pdu) end},
+                  {filter, fun(_Pdu) -> true end}|LogArgs],
+    Handler1 = {smpp_tty_log_hlr, []},
+    Handler2 = {smpp_tty_log_hlr, TtyLogArgs},
+    ok = smpp_log_mgr:swap_handler(Pid, Handler1, Handler2),
+    ok = smpp_log_mgr:pdu(Pid, DataError),
+    ok = smpp_log_mgr:pdu(Pid, DataOk),
+    Handler3 = {smpp_tty_log_hlr, [{file, "/wrong/file/name"}]},
+    {error, {error, enoent}} = smpp_log_mgr:swap_handler(Pid, Handler1, Handler3),
+    ok = smpp_log_mgr:add_handler(Pid, smpp_tty_log_hlr, []),
+    ok = gen_event:notify(Pid, other_event),
+    {ok, state} = smpp_tty_log_hlr:handle_info(info, state),
+    {ok, state} = smpp_tty_log_hlr:code_change(old_vsn, state, extra),
+%    {error, {'EXIT',{function_clause, _}}} =
+%        gen_event:call(Pid, smpp_tty_log_hlr, call),
+    _TArgs = smpp_log_mgr:delete_handler(Pid, smpp_tty_log_hlr, []),
+    ok = smpp_log_mgr:stop(Pid).
+
+
 performance() ->
     [{userdata, [{doc, "Test performace restrictions."}]}].
 
 performance(Conf) ->
     MaxTime = ?config(max_time, Conf),
-    MaxOperations = ?config(max_operations, Conf),
-    {SrcAddr, ShortMsg} = hd(ct:get_config(deliver_sm)),
-    Args = [SrcAddr, ShortMsg, MaxOperations],
-    {T, _} = timer:tc(?MODULE, performance_test, Args),
+    {T, _} = timer:tc(?MODULE, performance_test, [Conf]),
     if trunc(T/1000) > MaxTime -> exit(too_slow); true -> ok end.
+
+performance_test(_Conf) ->
+    ok.
 
 %%%-----------------------------------------------------------------------------
 %%% TRACING UTIL FUNCTIONS
@@ -171,25 +294,3 @@ purge_stub(Stub) ->
     code:delete(Stub),
     ct:print("Reloading default ~p stub", [Stub]),
     {module, Stub} = code:load_file(Stub).
-
-
-performance_test(_SrcAddr, _ShortMsg, 0) ->
-    ok;
-performance_test(SrcAddr, ShortMsg, Times) ->
-    Params = [{service_type, ""},
-              {source_addr_ton, ?TON_NATIONAL},
-              {source_addr_npi, ?NPI_ISDN},
-              {source_addr, SrcAddr},
-              {dest_addr_ton, ?TON_NATIONAL},
-              {dest_addr_npi, ?NPI_ISDN},
-              {destination_addr, "9999"},
-              {esm_class, ?ESM_CLASS_DEFAULT},
-              {protocol_id, ?PROTOCOL_ID_GSM},
-              {priority_flag, ?PRIORITY_FLAG_GSM_CBS_NORMAL},
-              {short_message, ShortMsg}],
-    {ok, Req} = operation:pack(operation:new(16#00000005, 2, Params)),
-    {ok, _PduReq} = operation:unpack(list_to_binary(Req)),
-    ParamsResp = [{message_id, "12345"}],
-    {ok, Resp} = operation:pack(operation:new(16#80000005, 0, 3, ParamsResp)),
-    {ok, _PduResp} = operation:unpack(list_to_binary(Resp)),
-    performance_test(SrcAddr, ShortMsg, Times - 1).

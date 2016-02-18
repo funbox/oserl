@@ -27,6 +27,10 @@
 %%% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 %%% POSSIBILITY OF SUCH DAMAGE.
 -module(smpp_disk_log_hlr).
+
+-modified('Date: 18.11.2015 11:20:00 NOVT').
+-modified_by('d.zolotarev@fun-box.ru').
+
 -behaviour(gen_event).
 
 %%% INCLUDE FILES
@@ -141,7 +145,7 @@ handle_call(Req, St) ->
 handle_event({pdu, Pdu}, St) ->
     case catch (St#st.filter)(Pdu) of
         true ->
-            disk_log:alog(St#st.name, {now(), (St#st.format)(Pdu)});
+            disk_log:alog(St#st.name, {erlang:timestamp(), (St#st.format)(Pdu)});
         _Otherwise ->
             ok
     end,
@@ -180,5 +184,3 @@ init_st(Args) ->
 
 merge_args(Args1, Args2) ->
     cl_lists:ukeymerge(1, lists:keysort(1, Args1), lists:keysort(1, Args2)).
-
-

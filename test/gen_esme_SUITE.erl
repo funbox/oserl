@@ -28,6 +28,9 @@
 %%% POSSIBILITY OF SUCH DAMAGE.
 -module(gen_esme_SUITE).
 
+-modified('Date: 18.11.2015 11:25:20 NOVT').
+-modified_by('d.zolotarev@fun-box.ru').
+
 %%% INCLUDE FILES
 -include_lib("common_test/include/ct.hrl").
 -include_lib("oserl/include/oserl.hrl").
@@ -70,7 +73,7 @@ suite() ->
 %% @end
 init_per_suite(Conf) ->
     lists:foreach(fun(X) -> code:add_path(X) end, ct:get_config(paths, [])),
-    {A1, A2, A3} = now(),
+    {A1, A2, A3} = erlang:timestamp(),
     random:seed(A1, A2, A3),
     application:start(common_lib),
     dbg:tracer(),
