@@ -141,7 +141,7 @@ handle_call(Req, St) ->
 handle_event({pdu, Pdu}, St) ->
     case catch (St#st.filter)(Pdu) of
         true ->
-            disk_log:alog(St#st.name, {now(), (St#st.format)(Pdu)});
+            disk_log:alog(St#st.name, {os:timestamp(), (St#st.format)(Pdu)});
         _Otherwise ->
             ok
     end,
