@@ -100,6 +100,7 @@ behaviour_info(callbacks) ->
      {handle_operation, 2},
      {handle_outbind, 2},
      {handle_resp, 3},
+     {handle_error, 3},
      {handle_unbind, 2}];
 behaviour_info(_Other) ->
     undefined.
@@ -595,6 +596,9 @@ handle_peer_outbind({?COMMAND_ID_OUTBIND, Pdu}, St) ->
 handle_peer_resp(Reply, Ref, St) ->
     (St#st.mod):handle_resp(St#st.esme, Reply, Ref).
 
+handle_peer_error(Reply, Ref, St) ->
+    (St#st.mod):handle_error(St#st.esme, Reply, Ref).
+
 
 handle_peer_unbind({?COMMAND_ID_UNBIND, Pdu}, St) ->
     SeqNum = smpp_operation:get_value(sequence_number, Pdu),
@@ -614,7 +618,7 @@ handle_peer_unbind({?COMMAND_ID_UNBIND, Pdu}, St) ->
 handle_timeout({response_timer, SeqNum}, St) ->
     {ok, {SeqNum, CmdId, _, Ref}} = smpp_req_tab:read(St#st.req_tab, SeqNum),
     Status = smpp_operation:request_failure_code(CmdId),
-    handle_peer_resp({error, {command_status, Status}}, Ref, St),
+    handle_peer_error({error, {command_status, Status}}, Ref, St),
     ok;
 handle_timeout(enquire_link_timer, _St) ->
     ok = gen_fsm:send_all_state_event(self(), ?COMMAND_ID_ENQUIRE_LINK);
@@ -654,7 +658,7 @@ send_request(CmdId, Params, Ref, St) ->
                   enquire_link_timer = smpp_session:start_timer(St#st.timers, enquire_link_timer),
                   inactivity_timer = smpp_session:start_timer(St#st.timers, inactivity_timer)};
         {error, _CmdId, Status, _SeqNum} ->
-            handle_peer_resp({error, {command_status, Status}}, Ref, St),
+            handle_peer_error({error, {command_status, Status}}, Ref, St),
             St
     end.
 

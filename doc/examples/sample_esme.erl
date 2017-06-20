@@ -63,6 +63,7 @@
          handle_outbind/2,
          handle_req/4,
          handle_resp/3,
+         handle_error/3,
          handle_unbind/3]).
 
 %%% CONNECT EXPORTS
@@ -270,7 +271,8 @@ handle_resp({error, Reason}, Ref, St) ->
     submit(Params, Args, ?LOW),
     {noreply, St#st{reqs = Reqs}}.
 
-
+handle_error({error, Reason} = Error, Ref, St) ->
+    handle_resp(Error, Ref, St).
 
 handle_unbind(_Pdu, _From, St) ->
     {reply, ok, St}.
