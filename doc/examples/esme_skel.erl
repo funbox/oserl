@@ -57,6 +57,7 @@
          handle_outbind/2,
          handle_req/4,
          handle_resp/3,
+         handle_error/3,
          handle_unbind/3]).
 
 %%% MACROS
@@ -136,6 +137,10 @@ handle_req(_Req, _Args, _Ref, St) ->
 
 
 handle_resp(_Resp, _Ref, St) ->
+    {noreply, St}.
+
+
+handle_error(_Resp, _Ref, St) ->
     {noreply, St}.
 
 

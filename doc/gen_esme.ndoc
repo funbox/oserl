@@ -249,7 +249,8 @@ to the other peer.
 
 The callback ``handle_req/4`` is called to notify the reference of the request
 to the callback module.  This reference is later passed as the second argument
-to ``handle_resp/3`` when the response arrives.
+to ``handle_resp/3`` when the response arrives or to ``handle_error/3`` when
+not.
 
 
 ``Args`` is an arbitrary term that is passed as is to ``handle_req/4``.
@@ -304,7 +305,8 @@ request does not go through the ESME queue and is not controlled by the
 throttler.  Right after sending the request to the other peer, the callback
 ``handle_req/4`` is called to notify the reference of the request to the
 callback module.  This reference is later passed as the second argument to
-``handle_resp/3`` when the response arrives.
+``handle_resp/3`` when the response arrives or to ``handle_error/3`` when
+not.
 
 ``Args`` is an arbitrary term that is passed as is to ``handle_req/4``.  The
 default ``Timeout`` is 2 minutes (TCP SYN_SENT).
@@ -324,7 +326,8 @@ request is issued immediately.  The request does not go through the ESME queue
 and is not controlled by the throttler.  Right after sending the request to the
 other peer, the callback ``handle_req/4`` is called to notify the reference of
 the request to the callback module.  This reference is later passed as the
-second argument to ``handle_resp/3`` when the response arrives.
+second argument to ``handle_resp/3`` when the response arrives or to ``handle_error/3`` when
+not.
 
 ``Args`` is an arbitrary term that is passed as is to ``handle_req/4``.
 
@@ -382,7 +385,8 @@ The function returns ``ok`` and the SMPP request is inserted into the ESME
 queue.  Once the request is sent to the other peer, the callback
 ``handle_req/4`` is called to notify the reference of the request to the
 callback module.  This reference is later passed as the second argument to
-``handle_resp/3`` when the response arrives.
+``handle_resp/3`` when the response arrives or to ``handle_error/3`` when
+not.
 
 If unspecified ``Priority`` is ``10``.  ``0`` is the highest priority.  Requests
 with higher priority are processed first.
@@ -788,7 +792,7 @@ Forwards an outbind operation (from the peer MC) to the callback module.
 
 This callback is called when the request ``Req`` is submitted to the other
 peer.  ``Ref`` is the reference of the request that can be later used to
-match the response arriving in ``handle_resp/3``.
+match the response arriving in ``handle_resp/3`` or in ``handle_error/3``.
 
 
 == handle_resp(Resp, Ref, St) -> Result ==
@@ -807,6 +811,26 @@ match the response arriving in ``handle_resp/3``.
 
 
 This callback is called when the response ``Resp`` associated to the request
+with reference ``Ref`` arrives.  SMPP related errors are returned as tuples
+with the format ``{command_status, CmdStatus}``.  If an unexpected error ocurrs
+``Reason`` will be a term indicating the failure reason.
+
+== handle_error(Error, Ref, St) -> Result ==
+
+: Types
+ : Error = {error, Reason}
+ : PduResp = pdu()
+ : Reason = {command_status, CmdStatus} | term()
+ : CmdStatus = int()
+ : Ref = ref()
+ : St = term()
+ : Result = {noreply, NewSt} | {noreply, NewSt, Timeout} | {stop, Reason, NewSt}
+ : NewSt = term()
+ : Timeout = int()
+ : Reason = term()
+
+
+This callback is called when the error ``Error`` associated to the request
 with reference ``Ref`` arrives.  SMPP related errors are returned as tuples
 with the format ``{command_status, CmdStatus}``.  If an unexpected error ocurrs
 ``Reason`` will be a term indicating the failure reason.

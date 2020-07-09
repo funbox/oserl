@@ -205,7 +205,8 @@ Issues a //broadcast_sm//, //cancel_broadcast_sm//, //cancel_sm//, //data_sm//,
 //submit_sm//, operation asynchronously.
 
 This function returns immediately the reference of the response.  The response
-will be received in the ``handle_resp/3`` callback.
+will be received in the ``handle_resp/3`` callback, or in ``handle_error/3`` when error
+occurred without response from MC (for example, timeout or no network connection)
 
 
 == unbind(SessionRef) -> Ref ==
@@ -337,6 +338,27 @@ Response is ignored by the session.
 Delivers a response to the callback module.  ``Ref`` is the reference as
 returned by the asynchronous requests and ``Resp`` is either ``{ok, PduResp}``
 or ``{error, Reason}``.  In SMPP errors ``Reason`` has the format
+``{command_status, CmdStatus}``.  In erlang related errors ``Reason`` will be
+the term as returned by the failing function.
+
+``Esme`` is the ESME's process id.
+
+
+== handle_error(Esme, Error, Ref) -> ok ==
+
+: Types
+ : Esme = pid()
+ : Addr = ip_address()
+ : Error = {error, Reason}
+ : Reason = {command_status, CmdStatus} | term()
+ : PduRsp = pdu()
+ : CmdStatus = int()
+ : Ref = ref()
+
+
+Delivers a error response to the callback module.  ``Ref`` is the reference as
+returned by the asynchronous requests and ``Error`` is ``{error, Reason}``.
+In SMPP errors ``Reason`` has the format
 ``{command_status, CmdStatus}``.  In erlang related errors ``Reason`` will be
 the term as returned by the failing function.
 

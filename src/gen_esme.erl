@@ -108,6 +108,7 @@
          handle_operation/2,
          handle_outbind/2,
          handle_resp/3,
+         handle_error/3,
          handle_unbind/2]).
 
 %%% MACROS
@@ -136,6 +137,7 @@ behaviour_info(callbacks) ->
      {handle_outbind, 2},
      {handle_req, 4},
      {handle_resp, 3},
+     {handle_error, 3},
      {handle_unbind, 3}];
 behaviour_info(_Other) ->
     undefined.
@@ -515,6 +517,8 @@ handle_cast({rps_max, Rps}, St) ->
     {noreply, St#st{rps = Rps}};
 handle_cast({handle_resp, Resp, Ref}, St) ->
     pack((St#st.mod):handle_resp(Resp, Ref, St#st.mod_st), St);
+handle_cast({handle_error, Error, Ref}, St) ->
+    pack((St#st.mod):handle_error(Error, Ref, St#st.mod_st), St);
 handle_cast({handle_alert_notification, Pdu}, St) ->
     pack((St#st.mod):handle_alert_notification(Pdu, St#st.mod_st), St).
 
@@ -559,6 +563,8 @@ handle_operation(SrvRef, {deliver_sm, Pdu}) ->
 handle_outbind(SrvRef, Pdu) ->
     gen_server:cast(SrvRef, {handle_outbind, Pdu}).
 
+handle_error(SrvRef, Error, Ref) ->
+    gen_server:cast(SrvRef, {handle_error, Error, Ref}).
 
 handle_resp(SrvRef, Resp, Ref) ->
     gen_server:cast(SrvRef, {handle_resp, Resp, Ref}).
@@ -638,7 +644,7 @@ req_send(Pid, CmdName, Params) ->
     catch
         _Any:{Reason, _Stack} -> % Session not alive or request malformed
             Ref = make_ref(),
-            handle_resp(self(), {error, Reason}, Ref),
+            handle_error(self(), {error, Reason}, Ref),
             Ref
     end.
 
