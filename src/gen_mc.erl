@@ -94,7 +94,7 @@
 %%% RECORDS
 -record(session, {pid, ref, consumer, rps}).
 
--record(st, {mod, mod_st, sessions = [], listener, log, timers, lsock}).
+-record(st, {mod, mod_st, sessions = [], listener, log, timers, lsock, proxy_ip_list}).
 
 %%%-----------------------------------------------------------------------------
 %%% BEHAVIOUR EXPORTS
@@ -279,14 +279,16 @@ init({Mod, Args, Opts}) ->
         {ok, LSock} ->
             {ok, Log} = smpp_log_mgr:start_link(),
             Timers = proplists:get_value(timers, Opts, ?DEFAULT_TIMERS_SMPP),
-            SessionOpts = [{log, Log}, {lsock, LSock}, {timers, Timers}],
+            ProxyIpList = proplists:get_value(proxy_ip_list, Opts, []),
+            SessionOpts = [{log, Log}, {lsock, LSock}, {timers, Timers}, {proxy_ip_list, ProxyIpList}],
             % Start a listening session
             {ok, Pid} = gen_mc_session:start_link(?MODULE, SessionOpts),
             St = #st{mod = Mod,
                      listener = Pid,
                      log = Log,
                      timers = Timers,
-                     lsock = LSock},
+                     lsock = LSock,
+                     proxy_ip_list = ProxyIpList},
             pack((St#st.mod):init(Args), St);
         {error, Reason} ->
             {stop, Reason}
@@ -350,7 +352,7 @@ handle_call({rps_max, Pid}, _From, St) ->
 handle_call({{handle_unbind, Pdu}, Pid}, From, St) ->
     pack((St#st.mod):handle_unbind(Pid, Pdu, From, St#st.mod_st), St);
 handle_call({{handle_accept, Addr}, Pid}, From, #st{listener = Pid} = St) ->
-    Opts = [{lsock, St#st.lsock}, {log, St#st.log}, {timers, St#st.timers}],
+    Opts = [{lsock, St#st.lsock}, {log, St#st.log}, {timers, St#st.timers}, {proxy_ip_list, St#st.proxy_ip_list}],
     lager:debug("handle_call handle_accept, creating new session with opts ~p", [Opts]),
     {ok, Listener} = gen_mc_session:start_link(?MODULE, Opts),
     NewSt = St#st{listener = Listener},
@@ -563,6 +565,8 @@ split_options([{addr, _} = H | T], Mc, Srv) ->
 split_options([{port, _} = H | T], Mc, Srv) ->
     split_options(T, [H | Mc], Srv);
 split_options([{timers, _} = H | T], Mc, Srv) ->
+    split_options(T, [H | Mc], Srv);
+split_options([{proxy_ip_list, _} = H | T], Mc, Srv) ->
     split_options(T, [H | Mc], Srv);
 split_options([H | T], Mc, Srv) ->
     split_options(T, Mc, [H | Srv]).

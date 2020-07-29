@@ -90,7 +90,8 @@
          session_init_timer,
          enquire_link_timer,
          inactivity_timer,
-         enquire_link_resp_timer}).
+         enquire_link_resp_timer,
+         proxy_ip_list = []}).
 
 %%%-----------------------------------------------------------------------------
 %%% BEHAVIOUR EXPORTS
@@ -161,12 +162,13 @@ outbind(FsmRef, Params) ->
 init([Mod, Mc, Opts]) ->
     _Ref = erlang:monitor(process, Mc),
     Timers = proplists:get_value(timers, Opts, ?DEFAULT_TIMERS_SMPP),
+    ProxyIpList= proplists:get_value(proxy_ip_list, Opts, false),
     Log = proplists:get_value(log, Opts),
     case proplists:get_value(lsock, Opts) of
         undefined ->
             init_open(Mod, Mc, proplists:get_value(sock, Opts), Timers, Log);
         LSock ->
-            init_listen(Mod, Mc, LSock, Timers, Log)
+            init_listen(Mod, Mc, LSock, Timers, Log, ProxyIpList)
     end.
 
 
@@ -187,16 +189,17 @@ init_open(Mod, Mc, Sock, Tmr, Log) ->
                        start_timer(Tmr, enquire_link_timer)}}.
 
 
-init_listen(Mod, Mc, LSock, Tmr, Log) ->
+init_listen(Mod, Mc, LSock, Tmr, Log, ProxyIpList) ->
     Self = self(),
-    Pid = spawn_link(smpp_session, wait_accept, [Self, LSock, Log]),
+    Pid = spawn_link(smpp_session, wait_accept, [Self, LSock, Log, ProxyIpList]),
     {ok, listen, #st{mc = Mc,
                      mod = Mod,
                      log = Log,
                      sock_ctrl = Pid,
                      req_tab = smpp_req_tab:new(),
                      op_tab = smpp_req_tab:new(),
-                     timers = Tmr}}.
+                     timers = Tmr,
+                     proxy_ip_list = ProxyIpList}}.
 
 
 terminate(_Reason, _Stn, Std) ->

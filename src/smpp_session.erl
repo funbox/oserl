@@ -35,7 +35,7 @@
 -export([congestion/3, connect/1, listen/1, tcp_send/2, send_pdu/3]).
 
 %%% SOCKET LISTENER FUNCTIONS EXPORTS
--export([wait_accept/3, wait_recv/3, recv_loop/4]).
+-export([wait_accept/4, wait_accept/3, wait_recv/3, recv_loop/4]).
 
 %% TIMER EXPORTS
 -export([cancel_timer/1, start_timer/2]).
@@ -70,7 +70,7 @@
 %% instant congestion state value is calculated.  Notice this value cannot be
 %% greater than 99.
 congestion(CongestionSt, WaitTime, Timestamp) ->
-    case (timer:now_diff(erlang:timestamp(), Timestamp) div (WaitTime + 1)) * 85 of
+    case (timer:now_diff(time:timestamp(), Timestamp) div (WaitTime + 1)) * 85 of
         Val when Val < 1 ->
             0;
         Val when Val > 99 ->  % Out of bounds
@@ -82,6 +82,7 @@ congestion(CongestionSt, WaitTime, Timestamp) ->
 
 connect(Opts) ->
     Ip = proplists:get_value(ip, Opts),
+    lager:debug("smpp_session connect opts: ~p", [Opts]),
     case proplists:get_value(sock, Opts, undefined) of
         undefined ->
             Addr = proplists:get_value(addr, Opts),
@@ -96,6 +97,7 @@ connect(Opts) ->
 
 
 listen(Opts) ->
+    lager:debug("smpp_session listen opts: ~p", [Opts]),
     case proplists:get_value(lsock, Opts, undefined) of
         undefined ->
             Addr = proplists:get_value(addr, Opts, default_addr()),
@@ -142,14 +144,17 @@ send_pdu(Sock, Pdu, Log) ->
 %%% SOCKET LISTENER FUNCTIONS
 %%%-----------------------------------------------------------------------------
 wait_accept(Pid, LSock, Log) ->
+    wait_accept(Pid, LSock, Log, false).
+
+wait_accept(Pid, LSock, Log, ProxyProtocol) ->
     case gen_tcp:accept(LSock) of
         {ok, Sock} ->
-            case handle_accept(Pid, Sock) of
+            case handle_accept(Pid, Sock, ProxyProtocol) of
                 true ->
                     ?MODULE:recv_loop(Pid, Sock, <<>>, Log);
                 false ->
                     gen_tcp:close(Sock),
-                    ?MODULE:wait_accept(Pid, LSock, Log)
+                    ?MODULE:wait_accept(Pid, LSock, Log, ProxyProtocol)
             end;
         {error, Reason} ->
             gen_fsm:send_all_state_event(Pid, {listen_error, Reason})
@@ -161,12 +166,11 @@ wait_recv(Pid, Sock, Log) ->
 
 
 recv_loop(Pid, Sock, Buffer, Log) ->
-    Timestamp = erlang:monotonic_time(),
+    Timestamp = time:timestamp(),
     inet:setopts(Sock, [{active, once}]),
     receive
         {tcp, Sock, Input} ->
-            Diff = erlang:monotonic_time() - Timestamp,
-            L = erlang:convert_time_unit(Diff, native, micro_seconds),
+            L = timer:now_diff(time:timestamp(), Timestamp),
             B = handle_input(Pid, list_to_binary([Buffer, Input]), L, 1, Log),
             ?MODULE:recv_loop(Pid, Sock, B, Log);
         {tcp_closed, Sock} ->
@@ -213,19 +217,27 @@ default_addr() ->
     {ok, Addr} = inet:getaddr(Host, inet),
     Addr.
 
-
-handle_accept(Pid, Sock) ->
+handle_accept(Pid, Sock, ProxyIpList) ->
     case inet:peername(Sock) of
         {ok, {Addr, _Port}} ->
-            lager:debug("sync_send_event accept to pid:~p Addr:~p", [Pid, Addr]),
-            gen_fsm:sync_send_event(Pid, {accept, Sock, Addr});
+            lager:debug("sync_send_event accept to pid:~p Addr:~p, proxy_ip_list: ~p", [Pid, Addr, ProxyIpList]),
+            case lists:member(Addr, ProxyIpList) of
+                true -> case proxy_protocol:accept(Sock) of
+                            {ok, {proxy_opts, _IpVersion, SourceAddress, DestAddress, SourcePort, DestPort, ConnectionInfo}} ->
+                                gen_fsm:sync_send_event(Pid,
+                                  {accept, Sock, {Addr, [
+                                    SourceAddress, DestAddress, SourcePort, DestPort, ConnectionInfo
+                                ]}});
+                            {error, _Reason} -> false
+                        end;
+                false -> gen_fsm:sync_send_event(Pid, {accept, Sock, Addr})
+            end;
         {error, _Reason} ->  % Most probably the socket is closed
             false
     end.
 
-
 handle_input(Pid, <<CmdLen:32, Rest/binary>> = Buffer, Lapse, N, Log) ->
-    Now = erlang:timestamp(), % PDU received.  PDU handling starts now!
+    Now = time:timestamp(), % PDU received.  PDU handling starts now!
     Len = CmdLen - 4,
     case Rest of
         <<PduRest:Len/binary-unit:8, NextPdus/binary>> ->
