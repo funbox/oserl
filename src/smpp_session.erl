@@ -117,8 +117,7 @@ listen(Opts) ->
 
 
 tcp_send(Sock, Data) when is_port(Sock) ->
-    try erlang:port_command(Sock, Data) of
-        true -> ok
+    try gen_tcp:send(Sock, Data) % https://github.com/erlang/otp/issues/7130
     catch
         error:_Error -> {error, einval}
     end.
