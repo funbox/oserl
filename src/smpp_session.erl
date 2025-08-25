@@ -115,13 +115,17 @@ listen(Opts) ->
             end
     end.
 
-
+-if(?OTP_RELEASE >= 26). % https://github.com/erlang/otp/issues/7130
+tcp_send(Sock, Data) ->
+    gen_tcp:send(Sock, Data).
+-else.
 tcp_send(Sock, Data) when is_port(Sock) ->
     try erlang:port_command(Sock, Data) of
         true -> ok
     catch
         error:_Error -> {error, einval}
     end.
+-endif.
 
 
 send_pdu(Sock, BinPdu, Log) when is_list(BinPdu) ->

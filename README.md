@@ -2,7 +2,7 @@
 
 based on OSERL 5.1.0, needs [common_lib](https://github.com/funbox/common_lib) 3.3.0 or higher.
 
-current library version 1.1.1
+current library version 1.1.2
 
 ## Documentation
 
