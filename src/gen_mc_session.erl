@@ -613,10 +613,14 @@ handle_peer_unbind({?COMMAND_ID_UNBIND, Pdu}, St) ->
 %%% HANDLE TIMEOUT
 %%%-----------------------------------------------------------------------------
 handle_timeout({mc_response_timer, SeqNum}, St) ->
-    {ok, {SeqNum, CmdId, _, Ref}} = smpp_req_tab:read(St#st.req_tab, SeqNum),
-    Status = smpp_operation:request_failure_code(CmdId),
-    handle_peer_resp({error, Status}, Ref, St),
-    ok;
+    case smpp_req_tab:read(St#st.req_tab, SeqNum) of
+        {ok, {SeqNum, CmdId, _, Ref}} ->
+            Status = smpp_operation:request_failure_code(CmdId),
+            handle_peer_resp({error, Status}, Ref, St),
+            ok;
+        {error, not_found} ->
+            ok
+    end;
 handle_timeout(enquire_link_timer, _St) ->
     ok = gen_statem:cast(self(), ?COMMAND_ID_ENQUIRE_LINK);
 handle_timeout(enquire_link_failure, _St) ->
