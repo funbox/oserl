@@ -139,6 +139,8 @@ behaviour_info(callbacks) ->
      {handle_resp, 3},
      {handle_error, 3},
      {handle_unbind, 3}];
+behaviour_info(optional_callbacks) ->
+    [];
 behaviour_info(_Other) ->
     undefined.
 

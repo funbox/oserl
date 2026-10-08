@@ -123,6 +123,8 @@ behaviour_info(callbacks) ->
      {handle_submit_multi, 4},
      {handle_submit_sm, 4},
      {handle_unbind, 4}];
+behaviour_info(optional_callbacks) ->
+    [];
 behaviour_info(_Other) ->
     undefined.
 
